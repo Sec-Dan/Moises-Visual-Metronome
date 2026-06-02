@@ -210,7 +210,7 @@ wEl.innerHTML = `
     <button id="mvc-tp" style="flex:1;height:22px;font-size:9px;margin-left:2px">TAP</button>
   </div>
   <div class="mr" style="margin-bottom:5px">
-    <button id="mvc-fsb" style="flex:1;height:28px;font-size:9px;letter-spacing:.8px">⊞ FULLSCREEN</button>
+    <button id="mvc-fsb" style="flex:1;height:28px;font-size:9px;letter-spacing:.8px">FULLSCREEN</button>
   </div>
   <div id="mvc-sub">load a track to sync</div>
 `;

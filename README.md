@@ -4,7 +4,7 @@ A Tampermonkey userscript that adds a **visual beat indicator** to [Moises Studi
 
 Built for drummers who practice with stem-separated tracks and want a peripheral visual click instead of (or alongside) the audio metronome.
 
-![beat bar preview](https://img.shields.io/badge/status-working-00ffc8?style=flat-square) ![platform](https://img.shields.io/badge/platform-Browser%20%2F%20Tampermonkey-784ba0?style=flat-square) ![license](https://img.shields.io/badge/license-MIT-ff3cac?style=flat-square)
+![beat bar preview](https://img.shields.io/badge/status-working-00ffc8?style=flat-square) ![platform](https://img.shields.io/badge/platform-Chrome%20%2F%20Android-784ba0?style=flat-square) ![license](https://img.shields.io/badge/license-MIT-ff3cac?style=flat-square)
 
 ---
 
@@ -52,12 +52,14 @@ Or visit the raw file URL directly in your browser - Tampermonkey will prompt to
 https://raw.githubusercontent.com/Sec-Dan/moises-visual-click/main/mvc.user.js
 ```
 
-### Android tablet (Kiwi Browser)
+### Android tablet
 
-1. Install [Kiwi Browser](https://kiwibrowser.com/) from the Play Store
-2. Install [Tampermonkey](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo) from the Chrome Web Store (Kiwi supports Chrome extensions)
-3. Visit the raw script URL above in Kiwi - Tampermonkey auto-detects `.user.js` files and prompts to install
-4. In Kiwi's extension settings, enable **Allow access to file URLs** for Tampermonkey
+You need a Chromium-based Android browser that supports Chrome extensions. [Lemur Browser](https://play.google.com/store/apps/details?id=com.lemurbrowser.exts) is a current working option - others exist, just avoid anything listed as archived or unmaintained.
+
+1. Install your chosen Chromium+extensions Android browser
+2. Install [Tampermonkey](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo) from the Chrome Web Store within that browser
+3. Visit the raw script URL above - Tampermonkey auto-detects `.user.js` files and prompts to install
+4. In the browser's extension settings, enable **Allow access to file URLs** for Tampermonkey
 
 ---
 
@@ -121,10 +123,12 @@ Moises polls `getStatus` at roughly 10Hz (~100ms intervals). Reacting on each po
 |---|---|
 | Chrome (desktop) | Working |
 | Firefox + Tampermonkey | Should work, untested |
-| Kiwi Browser (Android) | Working |
+| Chromium-based Android browsers with extension support | Working |
 | Safari | Not supported (no Tampermonkey) |
 
-Tested against Moises Studio as of June 2026. Moises could update their frontend at any time which may break the iframe hook - if it stops working, the most likely culprit is a changed AudioWorklet node name or iframe origin.
+Any Android browser that supports Chrome extensions and runs a modern Chromium engine should work. Test with a small track first to confirm the analysis step completes on your device.
+
+Tested against Moises Studio as of June 2025. Moises could update their frontend at any time which may break the iframe hook - if it stops working, the most likely culprit is a changed AudioWorklet node name or iframe origin.
 
 ---
 
