@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Moises Visual Metronome
 // @namespace    dansec.red
-// @version      1.0
+// @version      1.1
 // @match        https://studio.moises.ai/*
 // @match        https://studio1.moises.ai/*
 // @run-at       document-start
@@ -122,6 +122,10 @@ let lastBI=-1, beatTimer=null;
 // Playback state (updated on each tick)
 let posMs=0, wallMs=0, rate=1, playing=false;
 
+// Bluetooth latency compensation
+let btOffset = 0, lastFlashWall = 0, calActive = false, calTaps = [];
+const CAL_NEEDED = 5;
+
 const S = document.createElement('style');
 S.textContent = `
   #mvc-bar {
@@ -182,6 +186,23 @@ S.textContent = `
   }
   #mvc-led.on { background:#00ffc8;box-shadow:0 0 6px rgba(0,255,200,.6); }
   #mvc-sub { opacity:.25;font-size:9px;margin-top:4px; }
+
+  /* ── Bluetooth panel ── */
+  #mvc-bt-panel {
+    display:none;
+    border-top:1px solid rgba(0,255,200,.1);
+    margin-top:10px;padding-top:10px;
+  }
+  #mvc-bt-panel.open { display:block; }
+  #mvc-bt-badge { font-size:9px;opacity:.55;margin-left:3px; }
+  #mvc-bt-badge.on { opacity:1;color:#00ffe0; }
+  #mvc-bt-ms { font-size:16px;font-weight:700;min-width:58px;text-align:center;color:#00ffe0; }
+  #mvc-bt-hint { text-align:center;opacity:.28;font-size:9px;margin-top:3px; }
+  @keyframes mvc-cal-pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  #mvc-bt-cal.cal-active {
+    background:rgba(255,60,172,.18);border-color:rgba(255,60,172,.5);
+    color:#ff3cac;animation:mvc-cal-pulse 700ms ease-in-out infinite;
+  }
 `;
 document.head.appendChild(S);
 
@@ -211,6 +232,29 @@ wEl.innerHTML = `
   </div>
   <div class="mr" style="margin-bottom:5px">
     <button id="mvc-fsb" style="flex:1;height:28px;font-size:9px;letter-spacing:.8px">FULLSCREEN</button>
+  </div>
+  <!-- Bluetooth toggle -->
+  <div class="mr" style="margin-bottom:0">
+    <button id="mvc-bt-toggle" style="flex:1;height:28px;font-size:9px;letter-spacing:.8px;display:flex;align-items:center;justify-content:center;gap:5px">
+      <svg width="9" height="13" viewBox="0 0 9 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4.5" y1="0.5" x2="4.5" y2="12.5"/><polyline points="4.5,0.5 8,3.5 4.5,6.5"/><polyline points="4.5,6.5 8,9.5 4.5,12.5"/></svg>
+      BT OFFSET <span id="mvc-bt-badge">+0ms</span>
+    </button>
+  </div>
+  <!-- Bluetooth panel (collapsed by default) -->
+  <div id="mvc-bt-panel">
+    <div class="mr" style="margin-bottom:8px">
+      <span class="lb" style="opacity:.4">Bluetooth Latency</span>
+    </div>
+    <div class="mr">
+      <button id="mvc-bt-dn" style="width:24px;height:24px;font-size:16px">−</button>
+      <span id="mvc-bt-ms">+0 ms</span>
+      <button id="mvc-bt-up" style="width:24px;height:24px;font-size:16px">+</button>
+      <button id="mvc-bt-rst" style="height:24px;padding:0 9px;font-size:9px;margin-left:2px">RST</button>
+    </div>
+    <div class="mr" style="margin-bottom:3px">
+      <button id="mvc-bt-cal" style="flex:1;height:30px;font-size:9px;letter-spacing:.8px">TAP TO CALIBRATE</button>
+    </div>
+    <div id="mvc-bt-hint">tap when you hear each beat</div>
   </div>
   <div id="mvc-sub">load a track to sync</div>
 `;
@@ -275,6 +319,66 @@ function init() {
     fsBt.textContent = fsMode ? 'FULLSCREEN ✦' : 'FULLSCREEN';
   };
 
+  // Bluetooth
+  const btPanel  = document.getElementById('mvc-bt-panel');
+  const btBadge  = document.getElementById('mvc-bt-badge');
+  const btMsEl   = document.getElementById('mvc-bt-ms');
+  const btHint   = document.getElementById('mvc-bt-hint');
+  const btCalBt  = document.getElementById('mvc-bt-cal');
+  const btToggle = document.getElementById('mvc-bt-toggle');
+
+  const showBt = () => {
+    const sign = btOffset >= 0 ? '+' : '';
+    btMsEl.textContent  = `${sign}${btOffset} ms`;
+    btBadge.textContent = `${sign}${btOffset}ms`;
+    btBadge.classList.toggle('on', btOffset !== 0);
+  };
+
+  btToggle.onclick = () => {
+    btPanel.classList.toggle('open');
+    btToggle.classList.toggle('lit', btPanel.classList.contains('open'));
+  };
+  document.getElementById('mvc-bt-dn').onclick = () => {
+    btOffset = Math.max(-500, btOffset - 5); showBt(); restart();
+  };
+  document.getElementById('mvc-bt-up').onclick = () => {
+    btOffset = Math.min(1000, btOffset + 5); showBt(); restart();
+  };
+  document.getElementById('mvc-bt-rst').onclick = () => {
+    btOffset=0; calActive=false; calTaps=[];
+    btCalBt.classList.remove('cal-active');
+    btCalBt.textContent='TAP TO CALIBRATE';
+    btHint.textContent='tap when you hear each beat';
+    showBt(); restart();
+  };
+  btCalBt.onclick = () => {
+    if (!calActive) {
+      calActive=true; calTaps=[];
+      btCalBt.classList.add('cal-active');
+      btCalBt.textContent='LISTENING… TAP NOW';
+      btHint.textContent=`tap 0 / ${CAL_NEEDED}`;
+    } else {
+      if (lastFlashWall <= 0) return;
+      const delta = performance.now() - lastFlashWall;
+      if (delta >= 20 && delta <= 800) {
+        calTaps.push(delta);
+        btHint.textContent=`tap ${calTaps.length} / ${CAL_NEEDED}`;
+      }
+      if (calTaps.length >= CAL_NEEDED) {
+        const sorted  = [...calTaps].sort((a,b)=>a-b);
+        const trimmed = sorted.slice(1,-1);
+        const avg     = Math.round(trimmed.reduce((a,b)=>a+b) / trimmed.length);
+        btOffset = Math.max(-500, Math.min(1000, btOffset + avg));
+        calActive=false; calTaps=[];
+        btCalBt.classList.remove('cal-active');
+        btCalBt.textContent='TAP TO CALIBRATE';
+        const sign = btOffset>=0?'+':'';
+        btHint.textContent=`set to ${sign}${btOffset}ms`;
+        showBt(); restart();
+      }
+    }
+  };
+
   // Drag
   let drag=false, ox=0, oy=0;
   wEl.addEventListener('mousedown', e => {
@@ -292,6 +396,7 @@ function init() {
   // Flash
   const dotT={};
   function doFlash(b1) {
+    lastFlashWall = performance.now();   // record for BT calibration
     const cls = b1?'c1':'cx';
     barEl.classList.remove('c1','cx','go'); void barEl.offsetWidth;
     barEl.classList.add(cls,'go');
@@ -327,7 +432,7 @@ function init() {
     if (!manMode && beats?.length) {
       const idx = lastBI + 1;
       if (idx >= beats.length) return;
-      const delay = Math.max(0, (beats[idx] - np) / rate);
+      const delay = Math.max(0, (beats[idx] - np) / rate) + btOffset;
       beatTimer = setTimeout(() => {
         if (!playing) return;
         const b1 = (idx + shift) % bpb === 0;
@@ -340,7 +445,7 @@ function init() {
       const bInt = 60000 / bpm;
       const next = (Math.floor(np / bInt) + 1) * bInt;
       const nb   = Math.round(next / bInt);
-      const delay = Math.max(0, (next - np) / rate);
+      const delay = Math.max(0, (next - np) / rate) + btOffset;
       beatTimer = setTimeout(() => {
         if (!playing) return;
         const b1 = (nb + shift) % bpb === 0;
