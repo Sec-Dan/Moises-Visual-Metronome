@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Moises Visual Metronome
 // @namespace    dansec.red
-// @version      1.1
+// @version      1.1.1
 // @match        https://studio.moises.ai/*
 // @match        https://studio1.moises.ai/*
 // @run-at       document-start
@@ -347,6 +347,7 @@ function init() {
   document.getElementById('mvc-bt-rst').onclick = () => {
     btOffset=0; calActive=false; calTaps=[];
     btCalBt.classList.remove('cal-active');
+    btCalBt.disabled = false; btCalBt.style.opacity = '';
     btCalBt.textContent='TAP TO CALIBRATE';
     btHint.textContent='tap when you hear each beat';
     showBt(); restart();
@@ -363,6 +364,12 @@ function init() {
       if (delta >= 20 && delta <= 800) {
         calTaps.push(delta);
         btHint.textContent=`tap ${calTaps.length} / ${CAL_NEEDED}`;
+        // Grey out for 1s so a lagged reaction can't accidentally fire an extra tap
+        btCalBt.disabled = true;
+        btCalBt.style.opacity = '0.35';
+        setTimeout(() => {
+          if (calActive) { btCalBt.disabled = false; btCalBt.style.opacity = ''; }
+        }, 1000);
       }
       if (calTaps.length >= CAL_NEEDED) {
         const sorted  = [...calTaps].sort((a,b)=>a-b);
